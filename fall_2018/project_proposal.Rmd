@@ -1,0 +1,1177 @@
+---
+title: 'Survey of genetic technology knowledge and use among beef cattle producers'
+author: "Harly Durbin"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 2
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+library(tidyverse)
+library(readxl)
+library(reshape2)
+library(lme4)
+library(car)
+library(viridis)
+library(cowplot)
+library(maps)
+library(kableExtra)
+library(broom)
+library(leaps)
+
+```
+
+# Overview/introduction to the data
+
+  This survey data comes from a collaboration between the MU Animal Genomics group and the Department of Agricultural Education & Leadership. The survey was designed to evaluate Missouri beef cattle producers' use of and attitude towards genetic (EPDs: "estimated progeny differences" for economically relevant traits calculated based on pedigree relatedness) and genomic (GE-EPDs: EPDs augmented with genomic relatedness data obtained from DNA genotyping) technologies when making selection and breeding decisions. 
+  In the first phase of the survey, beef cattle producers across the country who subscribe to BEEF Magazine were surveyed online. In the next phase of the survey, beef cattle producers at 11 sale barns were surveyed over the course of winter 2017. In 2017, Missouri ranked [second in the nation](http://www.beefusa.org/beefindustrystatistics.aspx) for total calf crop and beef cows that have calved, and this survey and the results of these analyses will help to inform future university extension efforts. Questions were as follows:
+
+---
+
+1. Out of 100%, when choosing breeding stock how much do you use EPDs and how much do you use visual inspection?
+2. How often do you use the following items when selecting breeding animals?
+    + EPDs
+    + Genomic tests 
+    + Visual inspections
+    + Breed association staff
+    + Breed/semen catalogs
+    + Semen distributors
+    + Trusted breeder from whom you've previously purchased stock
+    + Other producers
+3. How often do you use consider the following EPD indexes when selecting breeding stock? 
+    + CED
+    + BW
+    + WW
+    + YW
+    + MILK
+    + CEM
+    + REA
+    + MARB
+    + Breed-specific value indexes (\$W, \$F, \$TI, etc.)
+    + ACC
+
+Where: 
+
+* **CED:** calving ease direct
+    + "...expressed as percentage of unassisted births, with a higher value indicating greater calving ease in first-calf heifers. It predicts the average difference in ease with which a sire's calves will be born when he is bred to first-calf heifers." (American Angus Association)
+* **CEM:** calving ease maternal
+    + "...expressed in percentage unassisted births with a higher value indicating greater calving ease in first-calf daughters. It predicts the average ease with which a sire's daughters will calve as first calf heifers when compared to daughters of other sires." (American Angus Association)
+* **BW:** birth weight
+* **WW:** weaning weight
+* **YW:** yearling weight
+* **MILK:** maternal milk yield
+* **REA:** ribeye area
+    + "Expressed in square inches, [REA] is a predictor of the difference in ribeye area of a sire's progeny compared to progeny of other sires." (American Angus Association)
+* **MARB:** marbling
+    + MARB is "expressed as a fraction of the difference in USDA marbling score of a sire's progeny compared to progeny of other sires" (American Angus Association), where marbling score is based upon degree of intramuscular fat marbling. 
+* **Breed specific value indexes:** allow for comparison of animals based upon multiple weighted traits
+* **ACC:** accuracy, EPD reliability where 1 indicates higher reliability. "Accuracy is impacted by the number of progeny and ancestral records included in the analysis." (American Angus Association)
+
+4. Which of the following would prevent you from using EPDs?
+    + EPDs are difficult to read
+    + Inconsistency between breed EPDs
+    + Difficult to understand difference between breed baseline and animal reports
+    + Too much overlap in composite data
+    + Too many bull EPDs to comb through
+    + EPDs are not available for the bulls I purchase
+    + EPDs have not worked in my situation
+    + EPDs don't accurately reflect genetic merit
+    + EPDs don't reflect all important factors in selecting breeding animals
+5. How important are the following factors in choosing breeding stock for your farm?
+    + EPDs
+    + Visual inspection
+    + Price
+    + Previous use of specific animal/genetic line
+    + Purebred breeder recommendation
+    + Other producers
+6. Who makes the breeding decisions on your farm?
+    + Me
+    + My grandparents
+    + My parents
+    + My spouse
+    + My siblings
+    + My sons/daughters
+    + My farm manager (not me)
+7. How do you learn about new breeding information and new industry technologies?
+    + Trade publications/magazines
+    + Breed associations
+    + Local extension office/agent
+    + Local ag teacher
+    + Online resources
+    + Veterinarian
+    + Semen Salesman (ABS, Select Sires, Genex, Cattle Visions, etc.)
+    + Other producers
+8. How big was your cattle operation (total cows, bulls, calves) in 2016?
+9. How old are you?
+10. Are you male or female?
+    
+# Hypotheses
+
+There are 3 main hypotheses which will be tested a number of different ways. 
+
+1. Older producers tend to be less progressive and therefore rely more heavily on visual appraisal when making breeding decisions.
+2. Size of operation is predictive of EPD/GE-EPD use.
+3. There is a relationship between reported EPD usage and reported barriers to EPD usage.
+
+
+# Data import and cleaning
+
+* Surveys with reported age < 18 years were removed.
+* Surveys with reported size of operation < 1 were removed.
+* In cases where only one of the question 1 (visual appraisal vs. EPD usage) elements was completed, the other element was imputed by subtracting the completed element from 100.
+    + Some respondents provided answers to question 1 that totaled to > 100. A new, standardized variable (`epd_usage_stand`) was created by dividing `usage_percent_epd` by the total of `usage_percent_epd` and `usage_percent_visual`. 
+* Responses that provided a range of numbers for `size_of_operation` were set to NA.
+
+Data import and cleaning code below: 
+
+```{r, echo = TRUE}
+
+#Specify na = "N/A" to change "N/A" strings to NA
+#trim leading and trailing whitespace in cells
+#Skip first "question" header column
+df1 <- read_excel(
+  "~/Box Sync/ProducerSurvey/Copy of Tummons Questionaire.xlsx",
+  na = "N/A",
+  trim_ws = TRUE,
+  skip = 1,
+  col_types = "text"
+) %>%
+  #prefix each column with which question it pertains to
+  rename_at(3:4, funs(paste0("usage.", .))) %>%
+  rename_at(5:12, funs(paste0("resources.", .))) %>%
+  rename_at(13:22, funs(paste0("consider_epd.", .))) %>%
+  rename_at(23:31, funs(paste0("barrier_epd.", .))) %>%
+  rename_at(32:37, funs(paste0("important_factors.", .))) %>%
+  rename_at(38:44, funs(paste0("decision_makers.", .))) %>%
+  rename_at(45:52, funs(paste0("learn.", .))) %>%
+  #rename columns in R friendly way (no spaces etc)
+  janitor::clean_names() %>%
+  #remove completely empty rows and columns
+  #(can sometimes result from Exel formatting)
+  janitor::remove_empty() %>%
+  #remove online entries since I got full dataset
+  filter(sale_barn != "Online")
+
+responses <- read_csv(
+  "~/Box Sync/ProducerSurvey/181203_online_data.csv",
+  trim_ws = TRUE,
+  skip = 3,
+  col_names = FALSE,
+  col_types = cols(.default = "c"),
+  na = c("N/A", "na", "n/a", "", " ", "NA")
+) %>%
+  select(9, 66:67, 18:65, 71:73) %>%
+  mutate(sale_barn = "Online") %>%
+  select(sale_barn, everything()) %>%
+  setNames(object = ., colnames(df1)) %>%
+  bind_rows(df1) %>%
+  #janitor names things weird sometimes
+  rename(important_factors_epds = important_factors_ep_ds) %>%
+  #if they provided a size range for size, set to NA
+  mutate(size_of_operation = if_else(str_detect(size_of_operation,
+                                                "/ | -"),
+                                     "0",
+                                     size_of_operation)) %>%
+  #remove words from size_of_operation 
+  mutate(size_of_operation = str_remove(size_of_operation, "[[:alpha:]]+")) %>%
+  #make age and size of operation numeric
+  mutate_at(.vars = vars(usage_percent_epd:age), as.numeric) %>%
+  mutate(sex = if_else(sex == "1", "M", sex),
+         sex = if_else(sex == "2", "F", sex)) %>%
+  #Capitalize sex (all M or F)
+  mutate(sex = R.utils::capitalize(sex)) %>%
+  #Create a column for online vs. in-person
+  mutate(medium = if_else(sale_barn == "Online" |
+                            sale_barn == "Pilot",
+                          "online",
+                          "in person")) %>%
+  #make sale barn, #, sex, medium, factors
+  mutate_at(c("sale_barn",
+              "survey_number",
+              "sex",
+              "medium"),
+            as.factor) %>%
+  #If one of % EPD vs visual is empty, fill in
+  mutate(usage_percent_epd = if_else(
+    is.na(usage_percent_epd) & !is.na(usage_percent_visual),
+    100 - usage_percent_visual,
+    usage_percent_epd
+  )) %>%
+  mutate(
+    usage_percent_visual = if_else(
+      is.na(usage_percent_visual) & !is.na(usage_percent_epd),
+      100 - usage_percent_epd,
+      usage_percent_visual
+    )
+  ) %>%
+  #Some people gave EPD + visual percentages
+  #that don't add up to 100: standardize
+  mutate(epd_usage_stand =
+           usage_percent_epd / (usage_percent_epd + usage_percent_visual)) %>%
+  #One response with a 7 when only 6 options: remove
+  mutate(learn_vet = replace(learn_vet, 7, NA)) %>% 
+  #Remove surveys where age is < 18 years
+  #Remove surveys where size of operation = 0
+  filter(age > 17,
+         size_of_operation != 0,
+         )
+  
+  
+  
+```
+
+
+
+```{r, echo=TRUE}
+
+responses_long <- responses %>%
+  melt(
+    id = c(
+      "sale_barn",
+      "medium",
+      "survey_number",
+      "size_of_operation",
+      "age",
+      "sex",
+      "usage_percent_epd",
+      "usage_percent_visual",
+      "epd_usage_stand"
+    ),
+    na.rm = FALSE
+  ) %>%
+  mutate(variable = as.character(variable)) %>%
+  rename(response = value)
+  
+```
+
+
+# Exploratory data analysis and summarization
+
+```{r}
+mean_scores <- function(question_variable){
+ responses_long %>%
+  filter(str_detect(variable, question_variable)) %>%
+  group_by(variable) %>%
+  summarise(mean_score = mean(response, na.rm = TRUE)) %>%
+  arrange(desc(mean_score)) %>% 
+  kable("latex") %>% 
+  kable_styling(position = "center")
+}
+```
+
+```{r}
+freqs <- function(question_variable){
+  responses_long %>% 
+  filter(str_detect(variable, question_variable),
+         !is.na(response)) %>% 
+  add_count(variable) %>% 
+  rename(variable_n = n) %>% 
+  group_by(variable, response) %>% 
+  mutate(response_n = n()) %>% 
+  mutate(freq = response_n/variable_n) %>% 
+  select(variable, variable_n, response_n, freq) %>% 
+  distinct() %>% 
+  split(.$variable) %>% 
+  purrr::map(~arrange(.x, desc(freq))) %>%
+  purrr::map(kable("latex"))
+  
+}
+
+
+
+```
+
+```{r}
+
+#FIXME I don't like this
+#Reorder factors by mean score?
+
+facet_lolli <- function(question_variable, breaks, n_row, n_col){
+  responses_long %>% 
+  filter(str_detect(variable,
+                  question_variable),
+         !is.na(response)) %>% 
+  mutate(variable = str_remove(variable,
+                               question_variable)) %>% 
+  add_count(variable) %>% 
+  rename(variable_n = n) %>% 
+  group_by(variable, response) %>% 
+  mutate(response_n = n()) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = response,
+             y = response_n)) +
+  geom_point() +
+  geom_linerange(aes(ymin = 0,
+                     ymax = response_n)) +
+  scale_x_continuous(breaks = breaks) +
+  #theme(axis.text.y = element_text(angle = 15)) +
+  coord_flip() +
+  facet_wrap(~variable,
+             nrow = n_row,
+             ncol = n_col)
+}
+
+```
+
+## How often do you use the following items when selecting breeding animals?
+
+* With possible answers:
+    + 1: Never
+    + 2: Rarely
+    + 3: Occasionally
+    + 4: Frequently
+    + 5: Often
+    + 6: Always
+* Treat as continuous
+
+
+Mean scores were as follows: 
+
+
+```{r}
+
+mean_scores("resources_")
+
+```
+
+
+
+```{r, eval= FALSE}
+
+responses_long %>%
+  filter(str_detect(variable, "resources_")) %>%
+  filter(!is.na(response)) %>%
+  mutate(variable = fct_reorder(variable, response, fun = mean(response))) %>%
+  mutate(variable = str_remove(variable,
+                               "resources_")) %>% 
+  ggplot(mapping = aes(x = variable,
+                       y = response,
+                       fill = variable)) +
+  geom_boxplot() +
+  scale_fill_viridis(discrete = TRUE) +
+  scale_y_continuous(breaks = 1:6) +
+  #label = c("Never", "Rarely", "Occasionally", "Frequently", "Often", "Always")) +
+  theme(axis.text.y = element_text(angle = 15,
+                                   hjust = 1),
+        #axis.text.x = element_text(angle = 15),
+        legend.position = "none") +
+  labs(x = "Response", 
+        y = "Variable") +
+  ggtitle(
+    str_wrap(
+      "How often do you use the following items when selecting breeding animals?",
+      width = 35
+    )
+  ) +
+  coord_flip()
+```
+
+```{r}
+
+facet_lolli(question_variable = "resources", breaks = 1:6, n_row = 4, n_col = 2)
+```
+
+
+Unsurprisingly, surveyed producers rely most often on visual ispection with EPDs in second.
+
+## How often do you use consider the following EPD indexes when selecting breeding stock? 
+
+* With possible answers:
+    + 1: Never
+    + 2: Rarely
+    + 3: Occasionally
+    + 4: Frequently
+    + 5: Often
+    + 6: Always
+    + 7: I do not know what this means
+
+Excluding "7: I do not know what this means", mean scores for each EPD were as follows:
+
+```{r}
+responses_long %>%
+filter(str_detect(variable,
+                  "consider_")) %>%
+  filter(response != 7) %>%
+  group_by(variable) %>%
+  summarise(mean_score = mean(response,
+                              na.rm = TRUE)) %>%
+  arrange(desc(mean_score)) %>% 
+  kable("latex") %>% 
+  kable_styling(position = "center")
+```
+
+
+```{r}
+facet_lolli(question_variable = "consider_epd_", breaks = 1:7, n_row = 5, n_col = 2)
+```
+
+Growth traits (weaning weight, birth weight, and yearling weight) are most often considered when making breeding decisions. This is unsurprising since most of the producers surveyed are likely cow/calf producers that sell cattle at weaning and are paid on the pound. 
+
+For each EPD index, what is the distribution of responses? How many responses are 7s ("I do not know what this means")? What percentage of the total responses for each variable are 7s?
+
+```{r}
+
+#https://stackoverflow.com/questions/24576515/relative-frequencies-proportions-with-dplyr
+responses_long %>% 
+  filter(str_detect(variable, "consider_"),
+         !is.na(response)) %>% 
+  add_count(variable) %>% 
+  rename(variable_n = n) %>% 
+  group_by(variable, response) %>% 
+  mutate(response_n = n()) %>% 
+  mutate(freq = response_n/variable_n) %>%
+  filter(response == 7) %>%
+  select(variable, variable_n, response_n, freq) %>% 
+  distinct() %>% 
+  arrange(desc(freq)) %>% 
+  kable("latex") %>% 
+  kable_styling(position = "center")
+
+```
+
+  Of the 417 respondents that provided responses for the question about EPD accuracy, ~13% responded with "7: I do not know what this means". However, these results may be underestimated since many fewer people answered the question about accuracy than answered the questions about other EPD idexes.
+  Since accuracy is not actually an EPD itself but a property of EPDs, this question may have been misleading. Still, correctly communicating how accuracy/increased observations affects EPD consistency is vital to dispelling producer mistrust of genetic technology, so this is an important insight. 
+  
+  
+```{r, eval=FALSE}
+
+question_variable <- "consider_"
+
+  responses_long %>% 
+  filter(str_detect(variable, question_variable),
+         !is.na(response)) %>% 
+  add_count(variable) %>% 
+  rename(variable_n = n) %>% 
+  group_by(variable, response) %>% 
+  mutate(response_n = n()) %>% 
+  mutate(freq = response_n/variable_n) %>% 
+  select(variable, variable_n, response_n, freq) %>% 
+  distinct() %>% 
+  filter(variable == "consider_epd_acc") %>% 
+  arrange(desc(freq))
+
+```
+
+
+## Which of the following would prevent you from using EPDs? 
+
+* With possible answers: 
+    + 1: Not a barrier
+    + 2: Small barrier
+    + 3: Moderate barrier
+    + 4: Large barrier
+    + 5: Prohibitive barrier
+
+Mean scores were as follows: 
+
+```{r}
+mean_scores("barrier_")
+```
+
+```{r, eval = FALSE}
+freqs("barrier_")
+```
+
+```{r}
+facet_lolli(question_variable = "barrier_epd_", breaks = 1:5, n_row = 5, n_col = 2)
+```
+
+
+EPD inconsistency is reported as the largest barrier to EPD usage. However, the range of the mean scores for all barriers is quite small (0.84).
+
+## How important are the following factors in choosing breeding stock for your farm?
+
+* With possible answers: 
+    + 1: Not important
+    + 2: Of little importance
+    + 3: Somewhat important
+    + 4: Important
+    + 5: Very important
+    
+Mean scores were as follows: 
+
+```{r}
+
+mean_scores("important_factors_")
+```
+
+```{r, eval=FALSE}
+
+##FIXME
+#Why is there such a big drop in how many answer??
+
+freqs("important_factors_")
+```
+
+
+```{r}
+facet_lolli(question_variable = "important_factors_", breaks = 1:5, n_row = 3, n_col = 2)
+```
+
+
+## Who makes the breeding decisions on your farm?
+
+* With possible answers:
+    + 1: Never/doesn't apply
+    + 2: Rarely
+    + 3: Occasionally
+    + 4: Frequently 
+    + 5: Often
+    + 6: Always
+    
+Mean scores were as follows:
+
+```{r}
+mean_scores("decision_makers")
+```
+
+```{r, eval=FALSE}
+
+##FIXME What was up w the 7s again??
+freqs("decision_makers")
+```
+
+```{r}
+facet_lolli(question_variable = "decision_makers_", breaks = 1:6, n_row = 4, n_col = 2)
+```
+
+
+Overwhelmingly, surveyed producers list themselves as the main decision makers on their farms.
+
+## How do you learn about new breeding information and new industry technologies?
+
+* With possible answers: 
+    + 1: Never
+    + 2: Rarely
+    + 3: Occasionally
+    + 4: Frequently 
+    + 5: Often
+    + 6: Always
+    
+Mean scores were as follows: 
+
+```{r}
+mean_scores("learn_")
+```
+
+```{r, eval=FALSE}
+
+##FIXME
+#Why is there such a big drop in how many answer??
+#What is the 0 in learn_vet
+freqs("learn_")
+```
+
+
+```{r}
+facet_lolli(question_variable = "learn_", breaks = 1:6, n_row = 4, n_col = 2)
+```
+
+On average, producers rely the least on university extension and ag teachers to learn about technologies and the most on maggazines/publications. However, these results may be biased as the online phase of the survey was facilitated with the help of BEEF Magazine.
+
+## Demographics
+
+### Location and medium
+
+After data cleaning, 257 surveys ere collected in person and 249 surveys were collected online. Of surveys collected in person at sale barns, Joplin Regional Stockyards and Kingsville Livestock Auction are the most highly represented. 
+
+```{r}
+responses %>% 
+  group_by(medium, sale_barn) %>% 
+  tally() %>% 
+  arrange(desc(n)) %>% 
+  kable("latex") %>% 
+  kable_styling(position = "center")
+
+```
+
+
+```{r, fig.width=6, fig.height=4, fig.align='center'}
+
+mo <- borders("state", regions = "missouri", fill = "white", color = "black")
+  
+responses %>% 
+  left_join(read_csv("barn_coordinates.csv"),
+            by = c("sale_barn")) %>%  
+  ggplot(aes(x = LNG,
+             y = LAT,
+             color = sale_barn)) +
+  mo + 
+  geom_count() +
+  scale_size_area(max_size = 13, 
+                  guide = "none") +
+  scale_color_viridis(discrete = TRUE) + 
+  guides(col = guide_legend(title = "Location")) +
+  theme_map() 
+
+```
+
+
+### Age and sex
+
+The mean age of all respondents is ~ 51 years. 
+
+```{r}
+
+responses %>% 
+  summarise(mean_age = mean(age),
+            median_age = median(age)) %>% 
+  kable("latex") %>% 
+  kable_styling(position = "center")
+```
+
+
+Online respondents were ~ 3 years younger than sale barn respondents on average. 
+
+```{r}
+responses %>% 
+  group_by(medium) %>% 
+  summarise(mean_age = mean(age),
+            median_age = median(age)) %>% 
+  kable("latex") %>% 
+  kable_styling(position = "center")
+```
+
+Overall, producers that identified as women tended to be slightly younger than producers that identified as men. However, only ~ 19% of total age-reporting respondents identified as women, the majority of which came from online responses. Of in person responses, 9% were women. Of online responses, 28% were women 
+
+```{r}
+responses %>% 
+  filter(!is.na(sex)) %>% 
+  group_by(sex, medium) %>% 
+  summarise(n = n(),
+            mean_age = mean(age),
+            median_age = median(age))%>% 
+  arrange(desc(n)) %>% 
+  kable("latex") %>% 
+  kable_styling(position = "center")
+```
+
+```{r}
+
+responses %>% 
+  filter(!is.na(sex)) %>% 
+  ggplot(aes(x = age,
+             fill = sex)) +
+  geom_density(alpha = 0.6) + 
+  scale_fill_discrete(labels = c("F (n = 91)", "M (n = 390)")) +
+    labs(x = "Reported age",
+       y = "Density") +
+  guides(col = guide_legend(title = "Sex"))
+
+  
+
+```
+
+### Size of operation
+
+There is a huge spread in reported size of operation. Of all respondents, the median size of operation in 100. This is much higher than [USDA ERS estimates](https://www.ers.usda.gov/topics/animal-products/cattle-beef/sector-at-a-glance/) of average beef cattle operation size, which may suggest some bias in our results. 
+
+```{r}
+responses %>% 
+  filter(!is.na(size_of_operation)) %>% 
+  summarise(mean_size = mean(size_of_operation, na.rm = TRUE),
+            median_size = median(size_of_operation, na.rm = TRUE),
+            sd_size = sd(size_of_operation, na.rm = TRUE),
+            min_size = min(size_of_operation),
+            max_size = max(size_of_operation),
+            n_reported = n()) %>% 
+  kable("latex") %>% 
+  kable_styling(position = "center")
+```
+
+Summary statistics broken down by medium and sale barn are as follows: 
+
+```{r}
+
+responses %>% 
+  filter(!is.na(size_of_operation)) %>%
+  group_by(sale_barn) %>% 
+  summarise(mean_size = mean(size_of_operation, na.rm = TRUE),
+            median_size = median(size_of_operation, na.rm = TRUE),
+            sd_size = sd(size_of_operation, na.rm = TRUE),
+            min_size = min(size_of_operation),
+            max_size = max(size_of_operation),
+            n_reported = n()) %>% 
+  arrange(desc(median_size)) %>% 
+  kable("latex") %>% 
+  kable_styling(position = "center")
+ 
+
+#FIXME
+#Talk some about it 
+```
+
+Size of operation is heavily left-skewed: 
+
+```{r}
+responses %>% 
+  ggplot(aes(x = size_of_operation)) +
+  geom_density()
+```
+
+
+```{r, eval=FALSE}
+
+#FIXME
+#source("https://gist.githubusercontent.com/benmarwick/2a1bb0133ff568cbe28d/raw/fb53bd97121f7f9ce947837ef1a4c65a73bffb3f/geom_flat_violin.R")
+
+responses %>% 
+  filter(!is.na(size_of_operation)) %>% 
+  ggplot(aes(y = size_of_operation)) +
+  geom_boxplot(alpha = 0.75) +
+  geom_point(aes(x = size_of_operation),
+             position = position_jitter(width = .15),
+             size = .5,
+             alpha = 0.8) +
+  expand_limits(x = 5.25) +
+  guides(fill = FALSE) +
+  guides(color = FALSE) +
+  scale_color_viridis(discrete = TRUE) +
+  scale_fill_viridis(discrete = TRUE) +
+  coord_flip()
+
+
+
+```
+
+
+# Modelling
+
+In the survey, there are 4 questions that ask about frequency and value of EPD/GE-EPD usage. In the dataset, these questions have various degrees of missingness. Standardized EPD usage (% importance of visual evaluation vs. % importance of EPDs when making breeding decisions) by far has the most missing data (11.04%). This may be because the question was on the front of the survey in the paper version, and therefore overlooked or assumed to be part of the instructions.
+
+```{r}
+responses %>% 
+  select(epd_usage_stand, resources_epds, resources_genomic_tests, important_factors_epds) %>% 
+  visdat::vis_miss(sort_miss = TRUE) +
+  theme(axis.text.x.top = element_text(angle = 45,
+                                       hjust = .2,
+                                       vjust = .2))  
+```
+
+
+Further, reporting a higher % EPD usage requires reporting a lower % visual appraisal usage since the answers can only add up to 100%. Visual appraisal is still a vital part of making breeding decisions, so the responses to this question may not accurately represent EPD usage among respondents. 
+The correlation between the responses to questions about EPD/GE-EPD usage range from 0.406 to 0.782, with GE-EPD usage being the least correlated to other questions. 
+
+```{r}
+cor(responses %>% 
+      na.omit() %>% 
+      select(epd_usage_stand, resources_epds, resources_genomic_tests, important_factors_epds)) %>% 
+  melt() %>% 
+  ggplot(aes(x = Var1,
+             y = Var2,
+             fill = value)) +
+  geom_tile() +
+  scale_fill_viridis(option = "A") +
+  theme(axis.text.x  = element_text(angle = 45,
+                                    hjust = 1)) +
+  ggtitle("Correlation between questions about EPD usage")
+  
+
+```
+
+
+```{r, fig.width=6, fig.height=6, eval = FALSE}
+responses %>% 
+      na.omit() %>% 
+      select(epd_usage_stand, resources_epds, resources_genomic_tests, important_factors_epds) %>% 
+  GGally::ggpairs()
+  
+```
+
+
+For this reason, some of the models were run iteratively using each of the four question responses as the $Y$ variable. 
+
+## 1. Older producers tend to be less progressive and therefore rely more heavily on visual appraisal when making breeding decisions.
+
+In order to determine the relationship between EPD usage and age, the following model was tested. 
+
+$$Y_{ijk} = \mu + \beta X_{i} + \gamma_{j(k)} + e_{ijk}$$
+
+Where: 
+
+* $Y$ is the scaled EPD usage from question 1  
+* $\mu$ is the mean
+* $X$ is the fixed effect of age (continuous)
+* $\gamma$ is the random effect of sale barn nested within medium (survey conducted online vs. in person) for $j = 1, 2$
+* $e$ is the residual
+  
+---
+
+```{r, echo=TRUE}
+set.seed(88)
+
+#Including random effects
+car::Anova(lmer(epd_usage_stand ~
+                 age +
+#https://stats.stackexchange.com/questions/79360/mixed-effects-model-with-nesting
+                 (1|medium/sale_barn),
+     data = responses), 
+     type = "III")
+
+```
+
+The model predicting scaled EPD usage from age is not significant at $\alpha = 0.05$ (p = 0.054). When the two variables are visualized, there doesn't appear to be a clear relationship.
+
+```{r}
+
+responses %>% 
+  select(age, epd_usage_stand) %>% 
+  GGally::ggpairs()
+
+```
+
+
+## 2. Size of operation is predictive of EPD/GE-EPD use.
+
+We hypothesized that producers who are more reliant on cattle productuon as their sole source of income (i.e., producers with reportedly larger operations) would be more data driven, and therefore more reliant on EPDs than visual appraisal. This hypothesis is supported by the [USDA ERS assertion](https://www.ers.usda.gov/topics/animal-products/cattle-beef/sector-at-a-glance/) that "oerations with 40 or fewer head are largely part of multi-enterprises, or are supplemental to off-farm employment". In order to determine the relationship between size of operation and reported EPD usage, the following model was tested. 
+
+$$Y_{ijk} = \mu + \beta X_{j} + \gamma_{j(k)} + e_{ijk}$$
+
+Where: 
+
+* $Y$ is the scaled EPD usage from question 1 
+* $\mu$ is the mean
+* $X$ is the reported operation size reported in question 8 (continuous)
+* $\gamma$ is the random effect of sale barn nested within medium (survey conducted online vs. in person) for $j = 1, 2$ 
+* $e$ is the residual
+
+
+
+```{r, echo = TRUE}
+#Including random effects
+Anova(lmer(epd_usage_stand ~
+                 size_of_operation +
+                 #sale barn nested in medium
+                 #https://stats.stackexchange.com/questions/79360/mixed-effects-model-with-nesting
+                 (1|medium/sale_barn),
+     data = responses))
+```
+
+Surprisingly, size of operation is also not significant in predicting EPD usage than age (p = 0.5561). Again, there is no clear relationship between the two variables when both are visualized. 
+
+```{r}
+
+responses %>% 
+  select(size_of_operation, epd_usage_stand) %>% 
+GGally::ggpairs()
+
+```
+
+```{r, echo=FALSE, eval=FALSE}
+responses %>% 
+  select(size_of_operation, resources_epds) %>% 
+  GGally::ggpairs()
+
+responses %>% 
+  select(size_of_operation, resources_genomic_tests) %>% 
+  GGally::ggpairs()
+
+responses %>% 
+  select(size_of_operation, important_factors_epds) %>% 
+  GGally::ggpairs()
+
+```
+
+## 3. There is a relationship between reported EPD usage and reported barriers to EPD usage.
+
+### Simple linear regression
+
+First, a simple linear regression was fit for each of the 4 response variables assaying EPD usage for each of the 9 barriers listed in question 4. 
+
+$$Y = \beta_o + \beta_{ij}X_{ij} + E$$
+
+Where: 
+
+* $Y$ is one of the four EPD usage responses described above (`epd_usage_stand`, `resources_epds`, `resources_genomic_tests`, or `important_factors_epds`)
+* $/beta_o$ is the intercept
+* $\beta_{ij}X_{ij}$ represents for the $i^{th}$ response variable $Y$, the reported "prohibitiveness" on a scale of 1-5 where 1 is "not a barrier" and 5 is "prohibitive barrier" (see survey question 4) for one of the 9 potential barriers to EPD usage assayed
+    + Continuous 
+
+---
+
+```{r, echo = TRUE}
+
+barrier_data <- responses %>%
+  melt(
+    id = c(
+      "sale_barn",
+      "medium",
+      "survey_number",
+      "size_of_operation",
+      "age",
+      "sex",
+      "epd_usage_stand",
+      "resources_genomic_tests",
+      "resources_epds",
+      "important_factors_epds"
+    ),
+    na.rm = FALSE
+  ) %>%
+  mutate(variable = as.character(variable)) %>%
+  #Pull out barrier responses
+  filter(str_detect(variable,
+                    "barrier_")) %>%
+  rename(response = value,
+         barrier = variable) %>%
+  melt(
+    id = c(
+      "sale_barn",
+      "medium",
+      "survey_number",
+      "size_of_operation",
+      "age",
+      "sex",
+      "barrier",
+      "response"
+    ),
+    value.name = "yval",
+    na.rm = FALSE
+  ) %>%
+  rename(yvar = variable) %>%
+  #Group by each variable assayed
+  group_by(yvar, barrier) %>%
+  #For each variable assayed, simple linear model predicting
+  #EPD usage from response
+  nest()
+```
+
+```{r, echo=TRUE}
+
+barrier_data %>%
+  mutate(
+    mod = purrr::map(data,
+                     ~ lm(
+                       formula = yval ~ response,
+                       data = .x
+                     )),
+    r_squared = purrr::map_dbl(mod,
+                               ~ pluck(glance(.x),
+                                       "r.squared")),
+    pval = purrr::map_dbl(mod,
+                          ~ pluck(glance(.x),
+                                  "p.value")),
+    aic = purrr::map_dbl(mod,
+                          ~ pluck(glance(.x),
+                                  "AIC"))
+  ) %>% 
+  select(-mod, -data) %>% 
+  mutate(signif = if_else(pval < 0.05, "*", "Not significant")) %>% 
+  arrange(aic, pval) %>% 
+  kable("latex",
+        caption = "Summary of all models with all possible response values",
+        booktabs = TRUE) %>% 
+  kable_styling(position = "center")
+  
+         
+```
+
+One should always check to ensure that regression assumptions (existence, independence, linearity, homoscedastity) are not violated prior to performing the analyses. It appears that `epd_usage_stand` is the only tested `Y` that is normally distributed.
+
+```{r, fig.width=6, fig.height=4, fig.align='center'}
+responses %>% 
+  ggplot(aes(x = epd_usage_stand)) +
+  geom_density()
+
+responses %>% 
+  ggplot(aes(x = resources_epds)) +
+  geom_density()
+
+responses %>% 
+  ggplot(aes(x = resources_genomic_tests)) +
+  geom_density()
+  
+responses %>% 
+  ggplot(aes(x = important_factors_epds)) +
+  geom_density()
+
+
+
+```
+
+---
+
+Of the models that used `epd_usage_stand` as the response variable, all barrier models excluding *"EPDs are not available for the bulls I purchase"* and *"Inconsistency between breed EPDs"* were significant. Of significant models, *"EPDs don't reflect all important factors in selecting breeding animals"* had the lowest AIC and lowest p-value. It would be interesting to see if there is a relationship between responses to this barrier and responses to question about selection index usage (which combine multiple selection traits into one EPD index).
+
+### Multiple linear regression
+
+Next, all possible subsets selection was performed to choose a model relating EPD usage to reported barriers to EPD usage. The full model was as follows: 
+
+$$Y = \beta_o + \beta_1X_1 + \beta_2X_2 + \beta_3X_3 + \beta_4X_4 + \beta_5X_5 + \beta_6X_6 + \beta_7X_7 + \beta_8X_8 + \beta_9X_9 + E$$
+
+Where:
+
+* $Y$ represents scaled EPD usage from question 1
+* $\beta_o$ represents the intercept
+* $\beta_{1-9}X_{1-9}$ represents for each of the 9 potential barriers to EPD usage assayed, the reported "prohibitiveness" on a scale of 1-5 where 1 is "not a barrier" and 5 is "prohibitive barrier" (see survey question 4)
+    + Continuous 
+
+---
+
+All possible subset selection using the `leaps` package: 
+
+```{r, echo=TRUE}
+#https://github.com/alexpghayes/broom/blob/some_cleanup/R/leaps.R
+tidy.regsubsets <- function(x, ...) {
+  s <- summary(x)
+  inclusions <- as_tibble(s$which)
+  metrics <- with(
+    s,
+    tibble(
+      r.squared = rsq,
+      adj.r.squared = adjr2,
+      BIC = bic,
+      mallows_cp = cp
+    )
+  )
+  bind_cols(inclusions, metrics)
+}
+```
+
+```{r, echo=TRUE}
+#https://rstudio-pubs-static.s3.amazonaws.com/2897_9220b21cfc0c43a396ff9abf122bb351.html
+multi_barrier <- responses %>% 
+  select(epd_usage_stand, starts_with("barrier_"))
+
+barrier_subsets <- regsubsets(epd_usage_stand ~ .,
+           data = multi_barrier, 
+           method = "exhaustive"
+           )
+
+tidied_barr <- tidy.regsubsets(barrier_subsets) %>% 
+  mutate(n_variable = row_number())
+```
+
+All models have a very low $R^2$ and explain very little of the variablility in the data. `barrier_epd_not_accurate` (*"EPDs don't accurately reflect genetic merit"*) is included in all model iterations). 
+
+```{r}
+tidied_barr %>% 
+  select(n_variable, r.squared:mallows_cp) %>% 
+  kable("latex",
+        caption = "Summary of all possible subsets model selection results",
+        booktabs = TRUE) %>% 
+  kable_styling(position = "center")
+```
+
+*"EPDs don't reflect all important factors in selecting breeding animals"* (the most significant model among the simple linear regressions) is not included until the 7 variable case. These 2 variables are probably highly collinear, as evidenced in the pairwise correlation matrix below.
+
+```{r}
+#First, need to determine collinearity between 
+cor(responses %>% 
+      na.omit() %>% 
+      select(starts_with("barrier_epd_")) ) %>% 
+  melt() %>% 
+  mutate(Var1 = str_remove(Var1,
+                               "barrier_epd_"),
+         Var2 = str_remove(Var2,
+                               "barrier_epd_")) %>% 
+  ggplot(aes(x = Var1,
+             y = Var2,
+             fill = value)) +
+  geom_tile() +
+  scale_fill_viridis(option = "A") +
+  theme(axis.text.x  = element_text(angle = 35,
+                                    hjust = 1)) +
+  ggtitle("Correlations between barriers to EPD usage")
+  
+
+
+```
+
+
+The model with 5 variables (`barrier_epd_inconsistent` + `barrier_epd_too_many_bulls` + `barrier_epd_not_available` + `barrier_epd_have_not_worked` + `barrier_epd_not_accurate`) had the lowest Cp value. 
+
+```{r, fig.width=6, fig.height=4, fig.align='center'}
+
+tidied_barr %>%
+  ggplot(aes(x = as.factor(n_variable), y = mallows_cp)) +
+  geom_point(color = "blue") +
+  #geom_point(aes(y = BIC, color = "red")) +
+  labs(x = "n variables in model", y = "Cp value")
+
+```
+
+The model with 2 variables (`barrier_epd_too_many_bulls` + `barrier_epd_not_accurate`) had the lowest BIC. 
+
+```{r, fig.width=6, fig.height=4, fig.align='center'}
+
+tidied_barr %>%
+  ggplot(aes(x = as.factor(n_variable), y = BIC)) +
+  geom_point(color = "red") +
+  #geom_point(aes(y = BIC, color = "red")) +
+  labs(x = "n variables in model", y = "BIC value")
+
+```
+
+Below are ANOVA results for the selected models with 2-5 variables.
+
+* Five variables:
+
+```{r, echo=TRUE}
+
+anova(lm(formula = epd_usage_stand ~ barrier_epd_inconsistent +
+           barrier_epd_too_many_bulls +
+           barrier_epd_not_available +
+           barrier_epd_have_not_worked +
+           barrier_epd_not_accurate,
+   data = responses))
+
+```
+
+---
+
+* Four variables:
+
+```{r}
+
+anova(lm(formula = epd_usage_stand ~ barrier_epd_too_many_bulls +
+           barrier_epd_not_available +
+           barrier_epd_have_not_worked +
+           barrier_epd_not_accurate,
+   data = responses))
+
+```
+
+---
+
+* Three variables:
+
+```{r, echo = TRUE}
+
+anova(lm(formula = epd_usage_stand ~ barrier_epd_too_many_bulls +
+           barrier_epd_not_available +
+           barrier_epd_not_accurate,
+   data = responses))
+
+```
+
+---
+
+* Twoo variables: 
+
+```{r, echo = TRUE}
+
+anova(lm(formula = epd_usage_stand ~ barrier_epd_too_many_bulls +
+           barrier_epd_not_accurate,
+   data = responses))
+
+```
+
+
+# Conclusions 
+
+  Overall, there is no difference in EPD usage between ages or size of operation. Based on anecdotal evidence, the insignificance of age is unsurprising to me. The insignificance of size of operation is surprising to me, though. However, our data is heavily left skewed and may not be a representative sample of the population. This skewness may be due to medium to large scale producers purchasing cattle by other means than their local sale barn (where half of our data came from). Still, the median size of operation in our data is much larger than the national average.
+  
+  Taking all results together: 
+  
+* An overabundance of EPDs to choose evaluate
+* A disconnect between the traits EPDs evaluate and the "whole picture" of animal worth 
+
+appear to be the biggest barriers to EPD usage. This may provide compelling evidence of the need for EPD indexes that evalueate health traits, structural traits, and environmental compatability. 
+
+  One major caveat to take into consideration for these results is potential sample bias. Most of the in-person surveys were collected at [Show-Me-Select](http://agebb.missouri.edu/select/) replacement heifer sales, part of an added value marketing program facilitated by the University of Missouri. Therefore, our sample may represent more progressive producers that the population average. 
+
+
+
