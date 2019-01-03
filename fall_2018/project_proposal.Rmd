@@ -129,6 +129,7 @@ Data import and cleaning code below:
 
 ```{r, echo = TRUE}
 
+
 #Specify na = "N/A" to change "N/A" strings to NA
 #trim leading and trailing whitespace in cells
 #Skip first "question" header column
@@ -175,7 +176,7 @@ responses <- read_csv(
                                                 "/ | -"),
                                      "0",
                                      size_of_operation)) %>%
-  #remove words from size_of_operation 
+  #remove words from size_of_operation
   mutate(size_of_operation = str_remove(size_of_operation, "[[:alpha:]]+")) %>%
   #make age and size of operation numeric
   mutate_at(.vars = vars(usage_percent_epd:age), as.numeric) %>%
@@ -211,21 +212,118 @@ responses <- read_csv(
   #that don't add up to 100: standardize
   mutate(epd_usage_stand =
            usage_percent_epd / (usage_percent_epd + usage_percent_visual)) %>%
-  #One response with a 7 when only 6 options: remove
-  mutate(learn_vet = replace(learn_vet, 7, NA)) %>% 
+  #Responses with 7s when only 6 options: remove
+  mutate(learn_vet = replace(learn_vet, 7, NA),
+         learn_vet = replace(learn_vet, 0, NA)) %>%
+  mutate_at(vars(starts_with("decision_")),
+            ~ (na_if(., 7))) %>%
   #Remove surveys where age is < 18 years
   #Remove surveys where size of operation = 0
   filter(age > 17,
-         size_of_operation != 0,
-         )
-  
-  
-  
+         size_of_operation != 0)
+
+
+```
+
+
+```{r}
+verbose_variable <- tribble(
+  ~variable, ~verbose_variable,
+  "resources_epds", "EPDs", 
+  "resources_genomic_tests", "Genomic tests",
+  "resources_visual_inspections", "Visual inspection",
+  "resources_breed_staff", "Breed association staff",
+  "resources_catalogs", "Breed/semen catalogs",
+  "resources_distributors", "Semen distributors",
+  "resources_trusted_breeder", "Trusted breeder",
+  "resources_other_producers", "Other producers",
+  "consider_epd_ced", "CED",
+  "consider_epd_bw", "BW",
+  "consider_epd_ww", "WW",
+  "consider_epd_yw", "YW",
+   "consider_epd_milk", "MILK",
+  "consider_epd_cem", "CEM",
+  "consider_epd_rea", "REA",
+  "consider_epd_marb", "MARB",
+  "consider_epd_breed_spec", "Breed-specific value indexes",
+  "consider_epd_acc", "ACC",
+  "barrier_epd_difficult_to_read", "Difficult to read",
+  "barrier_epd_inconsistent", "Inconsistency between breed EPDs",
+  "barrier_epd_difference_between", "Difficult to understand difference from baseline",
+  "barrier_epd_overlap", "Too much overlap in composite data",
+  "barrier_epd_too_many_bulls", "Too many bull EPDs",
+  "barrier_epd_not_available", "Not available for the bulls I purchase",
+  "barrier_epd_have_not_worked", "Have not worked in my situation",
+  "barrier_epd_not_accurate", "Don't accurately reflect genetic merit",
+  "barrier_epd_dont_reflect_factors", "Don't reflect all important factors",
+  "important_factors_epds", "EPDs",
+  "important_factors_visual", "Visual inspection",
+  "important_factors_price", "Price",
+  "important_factors_previous_use", "Previous use of specific animal/genetic line",
+  "important_factors_breeder_recommendation", "Purebred breeder recommendation",
+  "important_factors_other_producers_1", "Other producers",
+  "decision_makers_me", "Me",
+  "decision_makers_g_parents", "Grandparents",
+  "decision_makers_parents", "Parents",
+  "decision_makers_spouse", "Spouse",
+  "decision_makers_siblings", "Siblings",
+  "decision_makers_son_daughter", "Sons/daughters",
+  "decision_makers_farm_manager", "Farm manager",
+  "learn_pubs_magazines", "Trade publications/magazines",
+  "learn_breed_assoc", "Breed associations",
+  "learn_extension", "Local extension agent",
+  "learn_ag_teacher", "Local ag teacher",
+  "learn_online", "Online resources",
+  "learn_vet", "Veterinarian",
+  "learn_semen_salesman", "Semen salesmen",
+  "learn_other_producers_2", "Other producers")
+```
+
+```{r}
+verbose_response <- tribble(
+  ~response,                                                                        ~verbose_question,               ~verbose_response,
+         1L,         "How do you learn about new breeding information and new industry technologies?",                         "Never",
+         1L,      "How important are the following factors in choosing breeding stock for your farm?",                 "Not important",
+         1L, "How often do you use consider the following EPD indexes when selecting breeding stock?",                         "Never",
+         1L,              "How often do you use the following items when selecting breeding animals?",                         "Never",
+         1L,                              "Which of the following would prevent you from using EPDs?",                 "Not a barrier",
+         1L,                                         "Who makes the breeding decisions on your farm?",           "Never/doesn't apply",
+         2L,         "How do you learn about new breeding information and new industry technologies?",                        "Rarely",
+         2L,      "How important are the following factors in choosing breeding stock for your farm?",          "Of little importance",
+         2L, "How often do you use consider the following EPD indexes when selecting breeding stock?",                        "Rarely",
+         2L,              "How often do you use the following items when selecting breeding animals?",                        "Rarely",
+         2L,                              "Which of the following would prevent you from using EPDs?",                 "Small barrier",
+         2L,                                         "Who makes the breeding decisions on your farm?",                        "Rarely",
+         3L,         "How do you learn about new breeding information and new industry technologies?",                  "Occasionally",
+         3L,      "How important are the following factors in choosing breeding stock for your farm?",            "Somewhat important",
+         3L, "How often do you use consider the following EPD indexes when selecting breeding stock?",                  "Occasionally",
+         3L,              "How often do you use the following items when selecting breeding animals?",                  "Occasionally",
+         3L,                              "Which of the following would prevent you from using EPDs?",              "Moderate barrier",
+         3L,                                         "Who makes the breeding decisions on your farm?",                  "Occasionally",
+         4L,         "How do you learn about new breeding information and new industry technologies?",                    "Frequently",
+         4L,      "How important are the following factors in choosing breeding stock for your farm?",                     "Important",
+         4L, "How often do you use consider the following EPD indexes when selecting breeding stock?",                    "Frequently",
+         4L,              "How often do you use the following items when selecting breeding animals?",                    "Frequently",
+         4L,                              "Which of the following would prevent you from using EPDs?",                 "Large barrier",
+         4L,                                         "Who makes the breeding decisions on your farm?",                    "Frequently",
+         5L,         "How do you learn about new breeding information and new industry technologies?",                         "Often",
+         5L,      "How important are the following factors in choosing breeding stock for your farm?",                "Very important",
+         5L, "How often do you use consider the following EPD indexes when selecting breeding stock?",                         "Often",
+         5L,              "How often do you use the following items when selecting breeding animals?",                         "Often",
+         5L,                              "Which of the following would prevent you from using EPDs?",           "Prohibitive barrier",
+         5L,                                         "Who makes the breeding decisions on your farm?",                         "Often",
+         6L,         "How do you learn about new breeding information and new industry technologies?",                        "Always",
+         6L, "How often do you use consider the following EPD indexes when selecting breeding stock?",                        "Always",
+         6L,              "How often do you use the following items when selecting breeding animals?",                        "Always",
+         6L,                                         "Who makes the breeding decisions on your farm?",                        "Always",
+         7L, "How often do you use consider the following EPD indexes when selecting breeding stock?", "I do not know what this means"
+  )
+
 ```
 
 
 
-```{r, echo=TRUE}
+```{r, echo=FALSE}
 
 responses_long <- responses %>%
   melt(
@@ -243,8 +341,31 @@ responses_long <- responses %>%
     na.rm = FALSE
   ) %>%
   mutate(variable = as.character(variable)) %>%
-  rename(response = value)
-  
+  rename(response = value) %>% 
+  mutate(verbose_question = if_else(str_detect(variable, "resources_"),
+                                 "How often do you use the following items when selecting breeding animals?",
+                                 as.character(NA)),
+         verbose_question = if_else(str_detect(variable, "consider_"),
+                                 "How often do you use consider the following EPD indexes when selecting breeding stock?",
+                                 verbose_question),
+         verbose_question = if_else(str_detect(variable, "barrier_"),
+                                 "Which of the following would prevent you from using EPDs?",
+                                 verbose_question),
+         verbose_question = if_else(str_detect(variable, "important_factors_"),
+                                 "How important are the following factors in choosing breeding stock for your farm?",
+                                 verbose_question),
+         verbose_question = if_else(str_detect(variable, "decision_makers_"),
+                                 "Who makes the breeding decisions on your farm?",
+                                 verbose_question),
+         verbose_question = if_else(str_detect(variable, "learn_"),
+                                 "How do you learn about new breeding information and new industry technologies?",
+                                 verbose_question)
+         
+         
+         ) %>% 
+  left_join(verbose_variable) %>% 
+  left_join(verbose_response)
+
 ```
 
 
@@ -254,11 +375,14 @@ responses_long <- responses %>%
 mean_scores <- function(question_variable){
  responses_long %>%
   filter(str_detect(variable, question_variable)) %>%
-  group_by(variable) %>%
-  summarise(mean_score = mean(response, na.rm = TRUE)) %>%
-  arrange(desc(mean_score)) %>% 
-  kable("latex") %>% 
-  kable_styling(position = "center")
+  group_by(verbose_variable) %>%
+  summarise(`Mean response` = mean(response, na.rm = TRUE),
+            `Median response` = median(response, na.rm = TRUE)) %>%
+  arrange(desc(`Mean response`)) %>%
+    rename(`Response variable` = verbose_variable)
+    
+  #kable("latex") %>% 
+  #kable_styling(position = "center")
 }
 ```
 
@@ -275,8 +399,8 @@ freqs <- function(question_variable){
   select(variable, variable_n, response_n, freq) %>% 
   distinct() %>% 
   split(.$variable) %>% 
-  purrr::map(~arrange(.x, desc(freq))) %>%
-  purrr::map(kable("latex"))
+  purrr::map(~arrange(.x, desc(freq))) #%>%
+  #purrr::map(kable("latex"))
   
 }
 
@@ -289,29 +413,33 @@ freqs <- function(question_variable){
 #FIXME I don't like this
 #Reorder factors by mean score?
 
-facet_lolli <- function(question_variable, breaks, n_row, n_col){
-  responses_long %>% 
-  filter(str_detect(variable,
-                  question_variable),
-         !is.na(response)) %>% 
-  mutate(variable = str_remove(variable,
-                               question_variable)) %>% 
-  add_count(variable) %>% 
-  rename(variable_n = n) %>% 
-  group_by(variable, response) %>% 
-  mutate(response_n = n()) %>% 
-  ungroup() %>% 
-  ggplot(aes(x = response,
-             y = response_n)) +
-  geom_point() +
-  geom_linerange(aes(ymin = 0,
-                     ymax = response_n)) +
-  scale_x_continuous(breaks = breaks) +
-  #theme(axis.text.y = element_text(angle = 15)) +
-  coord_flip() +
-  facet_wrap(~variable,
-             nrow = n_row,
-             ncol = n_col)
+facet_lolli <- function(question_variable, breaks, n_row, n_col) {
+  responses_long %>%
+    filter(str_detect(variable,
+                      question_variable),!is.na(response)) %>%
+    mutate(verbose_response = fct_reorder(verbose_response, response)) %>%
+    add_count(verbose_variable) %>%
+    rename(`Question n` = n) %>%
+    group_by(variable, response) %>%
+    mutate(`Response n` = n()) %>%
+    ungroup() %>%
+    ggplot(aes(x = verbose_response,
+               y = `Response n`)) +
+    geom_point() +
+    geom_linerange(aes(ymin = 0, ymax = `Response n`)) +
+    theme(
+      axis.text.y = element_text(size = 18),
+      axis.text.x = element_text(size = 18),
+      axis.title.x = element_text(size = 18)
+    ) +
+    #scale_x_continuous(breaks = breaks) +
+    #theme(axis.text.y = element_text(angle = 15)) +
+    coord_flip() +
+    facet_wrap( ~ verbose_variable,
+                nrow = n_row,
+                ncol = n_col) +
+    xlab("") +
+    theme(strip.text.x = element_text(size = 24, margin = margin(.3, 0, .3, 0, "cm")))
 }
 
 ```
@@ -325,7 +453,7 @@ facet_lolli <- function(question_variable, breaks, n_row, n_col){
     + 4: Frequently
     + 5: Often
     + 6: Always
-* Treat as continuous
+* Treated as continuous
 
 
 Mean scores were as follows: 
@@ -335,43 +463,6 @@ Mean scores were as follows:
 
 mean_scores("resources_")
 
-```
-
-
-
-```{r, eval= FALSE}
-
-responses_long %>%
-  filter(str_detect(variable, "resources_")) %>%
-  filter(!is.na(response)) %>%
-  mutate(variable = fct_reorder(variable, response, fun = mean(response))) %>%
-  mutate(variable = str_remove(variable,
-                               "resources_")) %>% 
-  ggplot(mapping = aes(x = variable,
-                       y = response,
-                       fill = variable)) +
-  geom_boxplot() +
-  scale_fill_viridis(discrete = TRUE) +
-  scale_y_continuous(breaks = 1:6) +
-  #label = c("Never", "Rarely", "Occasionally", "Frequently", "Often", "Always")) +
-  theme(axis.text.y = element_text(angle = 15,
-                                   hjust = 1),
-        #axis.text.x = element_text(angle = 15),
-        legend.position = "none") +
-  labs(x = "Response", 
-        y = "Variable") +
-  ggtitle(
-    str_wrap(
-      "How often do you use the following items when selecting breeding animals?",
-      width = 35
-    )
-  ) +
-  coord_flip()
-```
-
-```{r}
-
-facet_lolli(question_variable = "resources", breaks = 1:6, n_row = 4, n_col = 2)
 ```
 
 
@@ -390,22 +481,29 @@ Unsurprisingly, surveyed producers rely most often on visual ispection with EPDs
 
 Excluding "7: I do not know what this means", mean scores for each EPD were as follows:
 
-```{r}
+```{r, eval=FALSE}
 responses_long %>%
 filter(str_detect(variable,
                   "consider_")) %>%
   filter(response != 7) %>%
-  group_by(variable) %>%
-  summarise(mean_score = mean(response,
-                              na.rm = TRUE)) %>%
-  arrange(desc(mean_score)) %>% 
-  kable("latex") %>% 
-  kable_styling(position = "center")
+  group_by(verbose_resp) %>%
+  summarise(`Mean response` = mean(response,
+                              na.rm = TRUE),
+            `Median response` = median(response,
+                                       na.rm = TRUE)) %>%
+  rename(`Response variable` = verbose_resp) %>% 
+  arrange(desc(`Mean response`)) #%>% 
+  #kable("latex") #%>% 
+  #kable_styling(position = "center")
 ```
 
 
-```{r}
-facet_lolli(question_variable = "consider_epd_", breaks = 1:7, n_row = 5, n_col = 2)
+
+
+```{r, fig.height=15, fig.width=17, eval = FALSE}
+
+facet_lolli("consider_epd_", breaks = 1:7, n_row = 5, n_col = 2)
+
 ```
 
 Growth traits (weaning weight, birth weight, and yearling weight) are most often considered when making breeding decisions. This is unsurprising since most of the producers surveyed are likely cow/calf producers that sell cattle at weaning and are paid on the pound. 
@@ -414,47 +512,30 @@ For each EPD index, what is the distribution of responses? How many responses ar
 
 ```{r}
 
-#https://stackoverflow.com/questions/24576515/relative-frequencies-proportions-with-dplyr
 responses_long %>% 
   filter(str_detect(variable, "consider_"),
          !is.na(response)) %>% 
-  add_count(variable) %>% 
-  rename(variable_n = n) %>% 
-  group_by(variable, response) %>% 
-  mutate(response_n = n()) %>% 
-  mutate(freq = response_n/variable_n) %>%
+  add_count(verbose_variable) %>% 
+  rename(`Total responses` = n) %>% 
+  group_by(verbose_variable, verbose_response) %>% 
+  mutate(`Total "7" responses` = n()) %>% 
+  mutate(`Percent "7" responses` = `Total "7" responses`/`Total responses`) %>%
   filter(response == 7) %>%
-  select(variable, variable_n, response_n, freq) %>% 
+  ungroup() %>% 
+  select(verbose_variable, `Total responses`, `Total "7" responses`, `Percent "7" responses`) %>% 
   distinct() %>% 
-  arrange(desc(freq)) %>% 
-  kable("latex") %>% 
-  kable_styling(position = "center")
+  rename(Variable = verbose_variable) %>% 
+  arrange(desc(`Percent "7" responses`)) %>% 
+  mutate(`Percent "7" responses` = scales::percent(`Percent "7" responses`))
+
+# %>% kable("latex") %>% 
+  #kable_styling(position = "center")
 
 ```
 
   Of the 417 respondents that provided responses for the question about EPD accuracy, ~13% responded with "7: I do not know what this means". However, these results may be underestimated since many fewer people answered the question about accuracy than answered the questions about other EPD idexes.
   Since accuracy is not actually an EPD itself but a property of EPDs, this question may have been misleading. Still, correctly communicating how accuracy/increased observations affects EPD consistency is vital to dispelling producer mistrust of genetic technology, so this is an important insight. 
   
-  
-```{r, eval=FALSE}
-
-question_variable <- "consider_"
-
-  responses_long %>% 
-  filter(str_detect(variable, question_variable),
-         !is.na(response)) %>% 
-  add_count(variable) %>% 
-  rename(variable_n = n) %>% 
-  group_by(variable, response) %>% 
-  mutate(response_n = n()) %>% 
-  mutate(freq = response_n/variable_n) %>% 
-  select(variable, variable_n, response_n, freq) %>% 
-  distinct() %>% 
-  filter(variable == "consider_epd_acc") %>% 
-  arrange(desc(freq))
-
-```
-
 
 ## Which of the following would prevent you from using EPDs? 
 
@@ -475,12 +556,45 @@ mean_scores("barrier_")
 freqs("barrier_")
 ```
 
-```{r}
+```{r, fig.height=15, fig.width=17}
 facet_lolli(question_variable = "barrier_epd_", breaks = 1:5, n_row = 5, n_col = 2)
 ```
 
 
 EPD inconsistency is reported as the largest barrier to EPD usage. However, the range of the mean scores for all barriers is quite small (0.84).
+
+When responses are categorized as not a barrier (1) or a barrier (2, 3, 4, or 5), "inconsistency between breed EPDs", "too much overlap in composite data", and "difficult to understand difference between breed baseline and animal reports" are still reported as the top 3 primary barriers to EPD usage. 
+
+```{r, fig.height=9, fig.width=15}
+
+responses_long %>%
+  filter(str_detect(variable, "barrier_")) %>%
+  mutate(is_barrier = if_else(response == 1, 0, 1)) %>%
+  group_by(verbose_variable) %>%
+  summarise(perc_problem = mean(is_barrier, na.rm = TRUE)) %>%
+  ggplot(aes(y = perc_problem,
+             x = fct_reorder(verbose_variable, perc_problem))) +
+  geom_point(aes(size = 3),
+             show.legend = FALSE) +
+  geom_linerange(aes(ymin = min(perc_problem) - .05, ymax = perc_problem)) +
+  scale_y_continuous(labels = scales::percent) +
+  scale_x_discrete(
+    labels = function(x)
+      str_wrap(x, width = 25)
+  ) +
+  coord_flip() +
+  labs(x = "Percent of responses reported as a barrier", y = "Barrier to to EPD usage") +
+  theme(
+    axis.text.y = element_text(size = 16),
+    axis.text.x = element_text(size = 16),
+    axis.title.x = element_text(size = 22, margin = margin(t = 35)),
+    axis.title.y = element_text(size = 22, margin = margin(r = 50))
+    
+  )
+
+  
+```
+
 
 ## How important are the following factors in choosing breeding stock for your farm?
 
@@ -507,7 +621,7 @@ freqs("important_factors_")
 ```
 
 
-```{r}
+```{r, fig.height=15, fig.width=17}
 facet_lolli(question_variable = "important_factors_", breaks = 1:5, n_row = 3, n_col = 2)
 ```
 
@@ -534,7 +648,7 @@ mean_scores("decision_makers")
 freqs("decision_makers")
 ```
 
-```{r}
+```{r, fig.height=15, fig.width=17}
 facet_lolli(question_variable = "decision_makers_", breaks = 1:6, n_row = 4, n_col = 2)
 ```
 
@@ -566,7 +680,7 @@ freqs("learn_")
 ```
 
 
-```{r}
+```{r, fig.height=15, fig.width=17}
 facet_lolli(question_variable = "learn_", breaks = 1:6, n_row = 4, n_col = 2)
 ```
 
