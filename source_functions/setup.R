@@ -2,18 +2,20 @@ library(tidyverse)
 library(readxl)
 library(reshape2)
 
+
 ##### Create base responses dataframe from raw data #####
 
 #Specify na = "N/A" to change "N/A" strings to NA
 #trim leading and trailing whitespace in cells
 #Skip first "question" header column
-df1 <- read_excel(
-  here::here("data/raw_data/Tummons_Questionaire.xlsx"),
-  na = "N/A",
-  trim_ws = TRUE,
-  skip = 1,
-  col_types = "text"
-) %>%
+df1 <- 
+  read_excel(
+    here::here("data/raw_data/Tummons_Questionaire.xlsx"),
+    na = "N/A",
+    trim_ws = TRUE,
+    skip = 1,
+    col_types = "text"
+  ) %>%
   #prefix each column with which question it pertains to
   rename_at(3:4, funs(paste0("usage.", .))) %>%
   rename_at(5:12, funs(paste0("resources.", .))) %>%
@@ -27,18 +29,26 @@ df1 <- read_excel(
   #remove completely empty rows and columns
   #(can sometimes result from Exel formatting)
   janitor::remove_empty() %>%
-  #remove partial online entries since I got full dataset
-  filter(sale_barn != "Online")
+  #remove online entries since I got full dataset
+  filter(sale_barn != "Online") %>% 
+  left_join(read_csv(
+    here::here("data/raw_data/barn_coordinates.csv"), 
+    col_types = cols(.default = "c"),
+  ),
+  by = c("sale_barn")) 
 
-responses <- read_csv(
-  here::here("data/raw_data/181203_online_data.csv"),
-  trim_ws = TRUE,
-  skip = 3,
-  col_names = FALSE,
-  col_types = cols(.default = "c"),
-  na = c("N/A", "na", "n/a", "", " ", "NA")
-) %>%
-  select(9, 66:67, 18:65, 71:73) %>%
+
+responses <- 
+  read_csv(
+    here::here("data/raw_data/181203_online_data.csv"),
+    trim_ws = TRUE,
+    skip = 3,
+    col_names = FALSE,
+    col_types = cols(.default = "c"),
+    na = c("N/A", "na", "n/a", "", " ", "NA")
+  ) %>%
+  #14 and 15 are lat and lng
+  select(9, 66:67, 18:65, 71:73, 14, 15) %>%
   mutate(sale_barn = "Online") %>%
   select(sale_barn, everything()) %>%
   setNames(object = ., colnames(df1)) %>%
@@ -52,8 +62,8 @@ responses <- read_csv(
                                      size_of_operation)) %>%
   #remove words from size_of_operation
   mutate(size_of_operation = str_remove(size_of_operation, "[[:alpha:]]+")) %>%
-  #make age and size of operation numeric
-  mutate_at(.vars = vars(usage_percent_epd:age), as.numeric) %>%
+  #make age,size of operation, lat, lng numeric
+  mutate_at(.vars = vars(usage_percent_epd:age, lat, lng), as.numeric) %>%
   mutate(sex = if_else(sex == "1", "M", sex),
          sex = if_else(sex == "2", "F", sex)) %>%
   #Capitalize sex (all M or F)
@@ -97,6 +107,19 @@ responses <- read_csv(
   #Remove surveys where size of operation = 0
   filter(age > 17,
          size_of_operation != 0)
+
+# Remove non-USA responses
+usa_coord <- 
+  map_data("usa")
+
+drop <- 
+  responses %>% 
+  filter(lat > max(usa_coord$lat) | lat < min(usa_coord$lat))
+
+responses <-
+  responses %>% 
+  anti_join(drop)
+
 
 ##### verbose_variable #####
 
@@ -153,7 +176,8 @@ verbose_variable <- tribble(
 
 ##### verbose_response #####
 
-verbose_response <- tribble(
+verbose_response <- 
+  tribble(
   ~response,                                                                        ~verbose_question,               ~verbose_response,
   1L,         "How do you learn about new breeding information and new industry technologies?",                         "Never",
   1L,      "How important are the following factors in choosing breeding stock for your farm?",                 "Not important",
@@ -194,7 +218,8 @@ verbose_response <- tribble(
 
 ##### responses_long #####
 
-responses_long <- responses %>%
+responses_long <- 
+  responses %>%
   melt(
     id = c(
       "sale_barn",
@@ -205,7 +230,9 @@ responses_long <- responses %>%
       "sex",
       "usage_percent_epd",
       "usage_percent_visual",
-      "epd_usage_stand"
+      "epd_usage_stand",
+      "lat",
+      "lng"
     ),
     na.rm = FALSE
   ) %>%

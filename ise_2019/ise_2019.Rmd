@@ -1,0 +1,212 @@
+---
+title: "ISE 2019 presentation"
+author: "Harly Durbin"
+date: "2/24/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(here)
+library(cowplot)
+library(maps)
+library(ggsci)
+library(forcats)
+library(stringr)
+library(readxl)
+library(purrr)
+library(tidylog)
+
+joined_files <- read_rds(here::here("data/derived_data/joined_files.rds"))
+source(here::here("source_functions/responses.R"))
+source(here::here("source_functions/function.facet_lolli.R"))
+source(here::here("source_functions/function.mean_scores.R"))
+
+
+```
+
+```{r}
+
+#Base USA map
+usa <- 
+  borders("state", regions = ".", fill = "white", colour = "black")
+```
+
+
+# Hair shedding 
+
+```{r}
+location_key <- 
+  read_csv(here::here("data/raw_data/location_key.csv"), trim_ws = TRUE) %>% 
+  janitor::clean_names() %>% 
+  janitor::remove_empty(which = c("rows", "cols")) %>% 
+  arrange(location) %>% 
+  mutate(location = str_to_upper(location))
+
+
+zip_coords <- 
+  location_key %>% 
+  left_join(read_csv(here::here("data/raw_data/zips_to_coordinates.csv")) %>% 
+              janitor::clean_names(),
+            by = c("zip"))
+```
+
+
+```{r}
+
+joined_files %>%
+  group_by(breed_code) %>%
+  tally()
+```
+
+## New map
+
+```{r}
+joined_files %>%
+  left_join(zip_coords %>%
+              select(location, zip:lng),
+            by = c("location")) %>%
+    #Take out NAs and Braunvieh sample
+  filter(!is.na(breed_code) & !breed_code %in% c("BRN", "CHIA")) %>%
+  # #Change year levels
+  # mutate(
+  #   year = case_when(
+  #     year == "2016" ~ "2016: n = 6,255",
+  #     year == "2017" ~ "2017: n = 6,376",
+  #     year == "2018" ~ "2018: n = 7,174"
+  #   )
+  # ) %>%
+  #Verbose breed annotations
+  mutate(breed_code = case_when(
+    breed_code == "AN" ~ "Angus: 7,572",
+    breed_code == "ANR" ~ "Red Angus: 1,530",
+    breed_code == "BG" ~ "Brangus: 765",
+    breed_code == "CHA" ~ "Charolais: 623",
+    breed_code == "CROS" ~ "Crossbred: 752",
+    breed_code == "CHIA" ~ "Chianina: 7", 
+    breed_code == "GEL" ~ "Gelbvieh: 565",
+    breed_code == "HFD" ~ "Hereford: 2,662", 
+    breed_code == "MAAN" ~ "Maine-Anjou: 227",
+    breed_code == "SH" ~ "Shorthorn: 356",
+    breed_code == "SIM" ~ "Simmental: 4,684",
+    breed_code == "SIMB" ~ "Simbrah: 56"
+  )) %>% 
+  #Reorder breed_code in order of frequency
+  mutate(breed_code = forcats::fct_infreq(breed_code)) %>% 
+  ggplot(aes(
+    x = lng,
+    y = lat,
+    colour = breed_code
+  )) +
+  usa +
+  geom_count(
+    alpha = 0.7,
+    #Shift position of overlapping points so that they can be seen better
+    position = position_jitterdodge(
+      dodge.width = 0.6,
+      jitter.width = 0.5,
+      jitter.height = -0.4
+    )
+  ) +
+  scale_size_area(max_size = 6,
+                  #Take off x & y axis border lines
+                  guide = 'none') +
+  ggsci::scale_color_igv() +
+ # viridis::scale_color_viridis(discrete = TRUE) +
+  # coord_fixed() +
+  #Set the "anchoring point" of the legend (bottom-left is 0,0; top-right is 1,1)
+  #Put bottom-left corner of legend box in bottom-left corner of graph
+  theme(
+    legend.justification = c(0, .05),
+    legend.position = c(0, 0),
+    legend.key.size = unit(1, "cm")
+  ) +
+  #facet_wrap( ~ year, nrow = 3, ncol = 1) +
+  guides(col = guide_legend(title = "Breed")) +
+ # theme(strip.text.x = element_text(size = 30, margin = margin(.3, 0, .3, 0, "cm"))) +
+  coord_map("albers", lat0 = 39, lat1 = 45) +
+  #coord_map(projection = "mercator") +
+  theme_map()
+
+
+
+ggsave(here::here("ise_2019/figures/190223.breed_map_transparent.png"), dpi = 600, bg = "transparent")
+ggsave(here::here("ise_2019/figures/190223.breed_map_white.png"), dpi = 600)
+```
+
+
+# Producer survey
+
+## Map
+
+
+```{r}
+
+usa_coord <- map_data("usa")
+
+drop <- responses %>% 
+  filter(lat > max(usa_coord$lat) | lat < min(usa_coord$lat))
+```
+
+```{r}
+#Where are pilot responses from? Do we have lat/lng
+responses %>% 
+  filter(is.na(lat))
+```
+
+
+```{r}
+responses %>% 
+  anti_join(drop) %>% 
+  ggplot(aes(
+    x = lng,
+    y = lat,
+    colour = medium
+  )) +
+  usa +
+  geom_count(
+    alpha = 0.7,
+    #Shift position of overlapping points so that they can be seen better
+    position = position_jitterdodge(
+      dodge.width = 0.6,
+      jitter.width = 0.5,
+      jitter.height = -0.4
+    )
+  ) +
+  scale_size_area(
+                #  max_size = 3,
+                  #Take off x & y axis border lines
+                  guide = 'none') +
+  ggsci::scale_color_igv() +
+ # viridis::scale_color_viridis(discrete = TRUE) +
+  # coord_fixed() +
+  #facet_wrap( ~ year, nrow = 3, ncol = 1) +
+  guides(col = guide_legend(title = "Medium")) +
+ # theme(strip.text.x = element_text(size = 30, margin = margin(.3, 0, .3, 0, "cm"))) +
+  coord_map("albers", lat0 = 39, lat1 = 45) +
+  #coord_map(projection = "mercator") +
+  theme_map()
+    # Set the "anchoring point" of the legend (bottom-left is 0,0; top-right is 1,1)
+  # Put bottom-left corner of legend box in bottom-left corner of graph
+  #   theme(
+  #   # legend.justification = c(0, .05),
+  #   legend.position = "bottom",
+  #   legend.box = "horizontal"
+  #   # legend.key.size = unit(1, "cm")
+  # )
+
+ggsave(here::here("ise_2019/figures/190225.survey_map_white.png"), dpi = 500)
+ggsave(here::here("ise_2019/figures/190225.survey_map_transparent.png"), dpi = 500, bg = "transparent")
+```
+
+# Learning 
+
+```{r, fig.height=15, fig.width=17}
+facet_lolli(question_variable = "learn_", breaks = 1:6, n_row = 4, n_col = 2)
+
+
+ggsave()
+```
